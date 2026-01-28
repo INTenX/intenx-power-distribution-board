@@ -1,0 +1,117 @@
+name: KiCad CI
+
+on:
+  push:
+    paths:
+      - '**.kicad_pcb'
+      - '**.kicad_sch'
+      - '**.kicad_pro'
+      - 'kibot.yaml'
+      - '.github/workflows/kicad-ci.yml'
+  pull_request:
+    paths:
+      - '**.kicad_pcb'
+      - '**.kicad_sch'
+      - '**.kicad_pro'
+      - 'kibot.yaml'
+      - '.github/workflows/kicad-ci.yml'
+
+env:
+  CI_PROJECT_NAME: intenx-power-distribution-board
+  KICAD9_3DMODELS_DIR: /usr/share/kicad/3dmodels
+
+jobs:
+  print: # GitLab stage: print
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Export Schematic PDF
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli sch export pdf --output ${{ env.CI_PROJECT_NAME }}_sch.pdf ${{ env.CI_PROJECT_NAME }}.kicad_sch
+      - name: Export BOM CSV
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli sch export bom --format-preset CSV --group-by Value --output ${{ env.CI_PROJECT_NAME }}_bom.csv ${{ env.CI_PROJECT_NAME }}.kicad_sch
+      - name: Export PCB PDF
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli pcb export pdf --output ${{ env.CI_PROJECT_NAME }}_pcb.pdf --layers F.Cu,B.Cu,Edge.Cuts,User.Comments,F.Silkscreen --ibt ${{ env.CI_PROJECT_NAME }}.kicad_pcb
+      - name: Upload Print Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CI_PROJECT_NAME }}-print
+          path: |
+            ${{ env.CI_PROJECT_NAME }}_sch.pdf
+            ${{ env.CI_PROJECT_NAME }}_bom.csv
+            ${{ env.CI_PROJECT_NAME }}_pcb.pdf
+
+  fab: # GitLab stage: fab
+    runs-on: ubuntu-latest
+    needs: [print]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create fab/gerbers directory
+        run: mkdir -p fab/gerbers
+      - name: Run DRC
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli pcb drc --format report --output fab/${{ env.CI_PROJECT_NAME }}_drc.txt ${{ env.CI_PROJECT_NAME }}.kicad_pcb
+      - name: Export POS
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli pcb export pos --output fab/${{ env.CI_PROJECT_NAME }}_pcba_pos.pos ${{ env.CI_PROJECT_NAME }}.kicad_pcb
+      - name: Export Drill
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli pcb export drill --output fab/${{ env.CI_PROJECT_NAME }}_drill ${{ env.CI_PROJECT_NAME }}.kicad_pcb
+      - name: Export Gerbers
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli pcb export gerbers --output fab/gerbers ${{ env.CI_PROJECT_NAME }}.kicad_pcb
+      - name: Export STEP
+        continue-on-error: true
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full bash -c "mkdir -p step && kicad-cli pcb export step --output step/${{ env.CI_PROJECT_NAME }}.step ${{ env.CI_PROJECT_NAME }}.kicad_pcb"
+      - name: Upload Fab Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CI_PROJECT_NAME }}-fab
+          path: |
+            fab
+            step
+
+  jlcpcb: # JLCPCB fabrication outputs via KiBot
+    runs-on: ubuntu-latest
+    needs: [print]
+    steps:
+      - uses: actions/checkout@v4
+      # Note: BOM/CPL outputs disabled until KiBot fixes KiCad 9 sheet_instances parsing
+      # See: https://github.com/INTI-CMNB/KiBot/issues - hierarchical schematic parsing issue
+      - name: Run KiBot for JLCPCB gerbers/drill
+        uses: INTI-CMNB/KiBot@v2_dk9
+        with:
+          config: kibot.yaml
+          board: ${{ env.CI_PROJECT_NAME }}.kicad_pcb
+          targets: 'JLCPCB_gerbers JLCPCB_drill'
+          dir: output
+      - name: Upload JLCPCB Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CI_PROJECT_NAME }}-jlcpcb
+          path: output/jlcpcb/
+
+  view: # GitLab stage: view
+    runs-on: ubuntu-latest
+    needs: [fab]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render PCB
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work -e PCB_FILE=${{ env.CI_PROJECT_NAME }}.kicad_pcb -e OUTPUT_PATH=public -e BACKGROUND=transparent -e ANIMATION=gif ghcr.io/linalinn/kicad-render:nightly-dev-2025-05-07-21-26 bash -c 'if [ -n "$ANIMATION" ]; then render-pcb.sh -f "$PCB_FILE" -o "$OUTPUT_PATH" -b "$BACKGROUND" -a "$ANIMATION"; else render-pcb.sh -f "$PCB_FILE" -o "$OUTPUT_PATH" -b "$BACKGROUND"; fi'
+      - name: Upload View Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CI_PROJECT_NAME }}-view
+          path: public
+
+  package: # GitLab stage: package
+    runs-on: ubuntu-latest
+    needs: [fab]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create package directory
+        run: mkdir -p package
+      - name: Export BOM for CircuitHub
+        run: docker run --rm -v ${{ github.workspace }}:/work -w /work --user $(id -u):$(id -g) -e XDG_CACHE_HOME=/work/.cache -e XDG_CONFIG_HOME=/work/.config -e XDG_DATA_HOME=/work/.local kicad/kicad:9.0.3-full kicad-cli sch export bom --format-preset CSV --group-by Value --labels 'Reference Designators,Quantity,Description,Value,DNP,Manufacturer,Manufacturer Part Number' --fields 'Reference,${QUANTITY},Description,Value,${DNP},Manufacturer_Name,Manufacturer_Part_Number' --output package/${{ env.CI_PROJECT_NAME }}_pcba_bom.csv ${{ env.CI_PROJECT_NAME }}.kicad_sch
+      - name: Copy KiCad files
+        run: cp *.kicad_sch package/ && cp ${{ env.CI_PROJECT_NAME }}.kicad_pcb package/ && cp ${{ env.CI_PROJECT_NAME }}.kicad_pro package/
+      - name: Upload Package Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CI_PROJECT_NAME }}-package
+          path: package
