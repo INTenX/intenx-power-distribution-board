@@ -3395,7 +3395,7 @@
 		(uuid "f949dcb6-483b-4139-95d1-eff85f2e09be")
 	)
 	(label "+5V"
-		(at 176.53 132.08 180)
+		(at 176.53 116.84 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5910,8 +5910,8 @@
 			)
 		)
 	)
-	(label "~{FAULT}"
-		(at 243.84 162.56 180)
+	(label "~{FAULT_U2}"
+		(at 238.76 162.56 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -6020,8 +6020,8 @@
 		(stroke (width 0) (type default))
 		(uuid "r1gnd000-0000-0000-0000-000000000001")
 	)
-	(label "~{FAULT}"
-		(at 243.84 124.46 180)
+	(label "~{FAULT_U1}"
+		(at 238.76 124.46 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -6554,6 +6554,16 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "j4move00-0000-0000-0000-000000000002")
+	)
+	(wire
+		(pts (xy 243.84 124.46) (xy 238.76 124.46))
+		(stroke (width 0) (type default))
+		(uuid "faultu10-0000-0000-0000-000000000001")
+	)
+	(wire
+		(pts (xy 243.84 162.56) (xy 238.76 162.56))
+		(stroke (width 0) (type default))
+		(uuid "faultu20-0000-0000-0000-000000000001")
 	)
 )
 
