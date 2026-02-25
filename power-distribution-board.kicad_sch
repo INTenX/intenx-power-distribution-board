@@ -6873,6 +6873,26 @@
 		)
 		(uuid "acn00000-0000-0000-0000-000000000001")
 	)
+	(label "+5V_J15"
+		(at 312.42 116.84 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "220f3c2a-4c54-4745-8251-b2922a2bc7b3")
+	)
+	(label "+5V_J16"
+		(at 312.42 154.94 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "83fdcfda-cb08-4fc0-bfb8-06c8b7d4128c")
+	)
 	(sheet_instances
 		(path "/"
 			(page "1")
