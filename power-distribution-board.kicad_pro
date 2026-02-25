@@ -563,7 +563,7 @@
       },
       {
         "netclass": "GND",
-        "pattern": "Earth"
+        "pattern": "GND"
       },
       {
         "netclass": "Mains_AC",
